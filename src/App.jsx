@@ -12,6 +12,8 @@ import {
   seedIfEmpty,
   resetAll,
 } from "./lib/ledgerStore";
+import { supabase } from "./lib/supabaseClient";
+import Login from "./Login";
 
 /* ============================================================
    말점 계모임 회비 장부 — "치부책(置簿冊)" 컨셉
@@ -396,10 +398,26 @@ export default function MajagyeLedger() {
   const [fileName, setFileName] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved | error
+  const [session, setSession] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const fileInputRef = useRef(null);
 
-  // ---- 최초 진입 시 Supabase에서 데이터 불러오기 (테이블이 비어있으면 시드 데이터로 초기화) ----
+  // ---- 로그인 상태 확인 & 구독 (RLS가 로그인한 사용자만 허용하므로 로그인 전엔 데이터를 안 불러옴) ----
   useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthChecked(true);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+      if (!newSession) setLoaded(false); // 로그아웃하면 다음 로그인 때 다시 불러오도록
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  // ---- 로그인 후 Supabase에서 데이터 불러오기 (테이블이 비어있으면 시드 데이터로 초기화) ----
+  useEffect(() => {
+    if (!session) return;
     let cancelled = false;
     (async () => {
       try {
@@ -425,7 +443,7 @@ export default function MajagyeLedger() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [session]);
 
   // ---- 회원 명단 변경 시 자동 저장 (거래내역은 업로드 시점에 바로 저장됨) ----
   useEffect(() => {
@@ -520,6 +538,30 @@ export default function MajagyeLedger() {
     },
     [transactions]
   );
+
+  if (!authChecked) {
+    return (
+      <div
+        style={{
+          minHeight: "100%",
+          background: "#2B3A55",
+          color: "#F4EFE0",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "'Noto Sans KR', sans-serif",
+          fontSize: 14,
+          padding: 40,
+        }}
+      >
+        확인 중…
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <Login />;
+  }
 
   if (!loaded) {
     return (
@@ -664,6 +706,16 @@ export default function MajagyeLedger() {
             }}
           >
             초기 데이터로 리셋
+          </button>
+          <button
+            onClick={() => supabase.auth.signOut()}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              background: "transparent", color: "#A9B4C4", border: "1px solid rgba(176,141,87,0.4)",
+              borderRadius: 8, padding: "9px 14px", fontSize: 12.5,
+            }}
+          >
+            로그아웃
           </button>
           {fileName && <span style={{ color: "#C7CEDA", fontSize: 12.5, alignSelf: "center" }}>{fileName}</span>}
           <span style={{ marginLeft: "auto", alignSelf: "center", fontSize: 12, color: "#93A0B4" }}>
