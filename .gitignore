@@ -26,3 +26,6 @@ dist-ssr
 # Environment variables
 .env
 .env.local
+
+# Claude가 보낸 파일 사본
+Claude outputs/

@@ -318,6 +318,40 @@ function StatCard({ icon: Icon, label, value, sub, tone }) {
   );
 }
 
+function MonthlyTooltip({ active, payload, label }) {
+  if (!active || !payload || !payload.length) return null;
+  const data = payload[0].payload;
+  return (
+    <div
+      style={{
+        background: "#fff",
+        border: "1px solid var(--paper-line)",
+        borderRadius: 8,
+        padding: "10px 12px",
+        fontSize: 12.5,
+        maxWidth: 260,
+        boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+      }}
+    >
+      <div style={{ fontWeight: 600, marginBottom: 6 }}>
+        {label} · {fmtWon(data.금액)}
+      </div>
+      {data.details.length === 0 ? (
+        <div style={{ color: "var(--ink-soft)" }}>입금 내역 없음</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          {data.details.map((d, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+              <span style={{ color: "var(--ink-soft)" }}>{d.name}</span>
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{fmtWon(d.amount)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function HouseholdDetail({ row, months }) {
   return (
     <div
@@ -594,10 +628,15 @@ export default function MajagyeLedger() {
   const worstOverdue = overdueHouseholds.slice().sort((a, b) => totalUnpaid(b) - totalUnpaid(a))[0];
 
   const chartData = ledger.months.map((m) => {
-    const sum = transactions
-      .filter((t) => t.month === m && t.deposit > 0 && t.desc !== "결산이자" && !/이자세금/.test(t.name))
-      .reduce((s, t) => s + t.deposit, 0);
-    return { month: MONTH_LABEL(m), 금액: sum };
+    const monthDeposits = transactions.filter(
+      (t) => t.month === m && t.deposit > 0 && t.desc !== "결산이자" && !/이자세금/.test(t.name)
+    );
+    const sum = monthDeposits.reduce((s, t) => s + t.deposit, 0);
+    const details = monthDeposits
+      .slice()
+      .sort((a, b) => b.deposit - a.deposit)
+      .map((t) => ({ name: t.name || "(이름없음)", amount: t.deposit }));
+    return { month: MONTH_LABEL(m), 금액: sum, details };
   });
 
   return (
@@ -811,7 +850,7 @@ export default function MajagyeLedger() {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--paper-line)" vertical={false} />
               <XAxis dataKey="month" tick={{ fontSize: 12, fill: "var(--ink-soft)" }} axisLine={{ stroke: "var(--paper-line)" }} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: "var(--ink-soft)" }} axisLine={false} tickLine={false} width={54} tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`} />
-              <Tooltip formatter={(v) => fmtWon(v)} contentStyle={{ fontSize: 12, borderRadius: 8, borderColor: "var(--paper-line)" }} />
+              <Tooltip content={<MonthlyTooltip />} cursor={{ fill: "rgba(43,58,85,0.06)" }} />
               <Bar dataKey="금액" radius={[4, 4, 0, 0]}>
                 {chartData.map((_, i) => <Cell key={i} fill="var(--indigo)" />)}
               </Bar>
