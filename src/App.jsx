@@ -287,9 +287,10 @@ function Stamp({ small }) {
   );
 }
 
-function StatCard({ icon: Icon, label, value, sub, tone }) {
+function StatCard({ icon: Icon, label, value, sub, tone, onClick, toggleHint }) {
   return (
     <div
+      onClick={onClick}
       style={{
         background: "var(--paper)",
         border: "1px solid var(--paper-line)",
@@ -299,11 +300,19 @@ function StatCard({ icon: Icon, label, value, sub, tone }) {
         flexDirection: "column",
         gap: 6,
         minWidth: 0,
+        cursor: onClick ? "pointer" : undefined,
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--ink-soft)" }}>
-        <Icon size={15} />
-        <span style={{ fontSize: 12.5, letterSpacing: 0.2 }}>{label}</span>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--ink-soft)" }}>
+          <Icon size={15} />
+          <span style={{ fontSize: 12.5, letterSpacing: 0.2 }}>{label}</span>
+        </div>
+        {onClick && (
+          <span style={{ fontSize: 10.5, color: "var(--indigo)", border: "1px solid var(--indigo)", borderRadius: 999, padding: "1px 7px", whiteSpace: "nowrap" }}>
+            {toggleHint}
+          </span>
+        )}
       </div>
       <div
         style={{
@@ -491,6 +500,7 @@ export default function MajagyeLedger() {
   const [session, setSession] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [fixedDeposits, setFixedDeposits] = useState([]);
+  const [assetView, setAssetView] = useState("balance"); // balance | total
   const fileInputRef = useRef(null);
 
   // ---- 로그인 상태 확인 & 구독 (RLS가 로그인한 사용자만 허용하므로 로그인 전엔 데이터를 안 불러옴) ----
@@ -692,7 +702,8 @@ export default function MajagyeLedger() {
     (s, r) => s + r.unpaidMonths.length * r.household.fee + r.priorArrearsAmount,
     0
   );
-  const combinedTotal = currentBalance + totalUnpaidAmount;
+  const totalFixedDeposit = fixedDeposits.reduce((s, d) => s + d.balance, 0);
+  const totalAssets = currentBalance + totalFixedDeposit + totalUnpaidAmount;
 
   const chartData = ledger.months.map((m) => {
     const monthDeposits = transactions.filter(
@@ -892,18 +903,25 @@ export default function MajagyeLedger() {
 
         {/* 통계 카드 */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 22 }}>
-          <StatCard
-            icon={Wallet}
-            label="잔금"
-            value={fmtWon(currentBalance)}
-            sub={latestTx ? `${latestTx.date} 기준 · 누적 수금 ${fmtWon(totalCollected)}` : "거래 없음"}
-          />
-          <StatCard
-            icon={PiggyBank}
-            label="잔금 + 미납 합계"
-            value={fmtWon(combinedTotal)}
-            sub={totalUnpaidAmount > 0 ? `미납 ${fmtWon(totalUnpaidAmount)} 포함` : "미납 없음"}
-          />
+          {assetView === "balance" ? (
+            <StatCard
+              icon={Wallet}
+              label="현재 잔금"
+              value={fmtWon(currentBalance)}
+              sub={latestTx ? `${latestTx.date} 기준 · 누적 수금 ${fmtWon(totalCollected)}` : "거래 없음"}
+              onClick={() => setAssetView("total")}
+              toggleHint="총 자산 보기"
+            />
+          ) : (
+            <StatCard
+              icon={PiggyBank}
+              label="총 자산"
+              value={fmtWon(totalAssets)}
+              sub={`잔금 ${fmtWon(currentBalance)} + 정기예금 ${fmtWon(totalFixedDeposit)} + 미납 ${fmtWon(totalUnpaidAmount)}`}
+              onClick={() => setAssetView("balance")}
+              toggleHint="현재 잔금 보기"
+            />
+          )}
           <StatCard icon={CheckCircle2} label={`${MONTH_LABEL(currentMonth)} 납부 현황`} value={`${paidThisMonth} / ${households.length}가구`} />
           <StatCard
             icon={AlertTriangle}
