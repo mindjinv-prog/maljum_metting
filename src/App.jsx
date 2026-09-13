@@ -7,11 +7,13 @@ import { Upload, ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, Users, 
 import {
   fetchHouseholds,
   fetchTransactions,
+  fetchFixedDeposits,
   saveHouseholds,
   insertNewTransactions,
   seedIfEmpty,
   resetAll,
 } from "./lib/ledgerStore";
+import { Landmark } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./Login";
 
@@ -352,6 +354,60 @@ function MonthlyTooltip({ active, payload, label }) {
   );
 }
 
+function FixedDepositCard({ deposit }) {
+  const d = deposit;
+  const daysLeft = Math.ceil((new Date(d.maturityDate) - new Date()) / 86400000);
+  return (
+    <div style={{ background: "#fff", border: "1px solid var(--paper-line)", borderRadius: 10, padding: "16px 18px", marginBottom: 22 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+        <Landmark size={16} color="var(--indigo)" />
+        <div style={{ fontSize: 13.5, fontWeight: 600 }}>{d.productName} 현황</div>
+        <span style={{ fontSize: 11.5, color: "var(--ink-soft)" }}>{d.accountNumber}</span>
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+          gap: 14,
+          marginBottom: d.history.length ? 14 : 0,
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 11.5, color: "var(--ink-soft)" }}>현재 잔액</div>
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 18, fontWeight: 600 }}>{fmtWon(d.balance)}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11.5, color: "var(--ink-soft)" }}>원금</div>
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 14 }}>{fmtWon(d.principal)}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11.5, color: "var(--ink-soft)" }}>적용금리</div>
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 14, color: "var(--stamp-red-deep)" }}>연 {d.rate}%</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11.5, color: "var(--ink-soft)" }}>만기일</div>
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 14 }}>
+            {d.maturityDate}
+            {daysLeft >= 0 && <span style={{ color: "var(--ink-soft)" }}> (D-{daysLeft})</span>}
+          </div>
+        </div>
+      </div>
+      {d.history.length > 0 && (
+        <div style={{ borderTop: "1px dashed var(--paper-line)", paddingTop: 10 }}>
+          {d.history.map((h, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, padding: "3px 0" }}>
+              <span style={{ color: "var(--ink-soft)" }}>{h.date} · {h.desc}</span>
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", color: h.amount < 0 ? "var(--stamp-red-deep)" : "var(--ink)" }}>
+                {h.amount >= 0 ? `+${fmtWon(h.amount)}` : fmtWon(h.amount)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function HouseholdDetail({ row, months }) {
   return (
     <div
@@ -434,6 +490,7 @@ export default function MajagyeLedger() {
   const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved | error
   const [session, setSession] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [fixedDeposits, setFixedDeposits] = useState([]);
   const fileInputRef = useRef(null);
 
   // ---- 로그인 상태 확인 & 구독 (RLS가 로그인한 사용자만 허용하므로 로그인 전엔 데이터를 안 불러옴) ----
@@ -456,13 +513,18 @@ export default function MajagyeLedger() {
     (async () => {
       try {
         await seedIfEmpty(INITIAL_HOUSEHOLDS, SEED_TRANSACTIONS);
-        const [loadedHouseholds, loadedTransactions] = await Promise.all([
+        const [loadedHouseholds, loadedTransactions, loadedFixedDeposits] = await Promise.all([
           fetchHouseholds(),
           fetchTransactions(),
+          fetchFixedDeposits().catch((err) => {
+            console.error("[Supabase] 정기예금 정보를 불러오지 못했어요.", err);
+            return [];
+          }),
         ]);
         if (!cancelled) {
           setHouseholds(loadedHouseholds.length ? loadedHouseholds : INITIAL_HOUSEHOLDS);
           setTransactions(loadedTransactions.length ? loadedTransactions : SEED_TRANSACTIONS);
+          setFixedDeposits(loadedFixedDeposits);
           setLoaded(true);
         }
       } catch (err) {
@@ -857,6 +919,10 @@ export default function MajagyeLedger() {
             </BarChart>
           </ResponsiveContainer>
         </div>
+
+        {fixedDeposits.map((d) => (
+          <FixedDepositCard key={d.id} deposit={d} />
+        ))}
 
         {/* 장부 도장 테이블 */}
         <div style={{ background: "#fff", border: "1px solid var(--paper-line)", borderRadius: 10, overflow: "hidden", marginBottom: 22 }}>

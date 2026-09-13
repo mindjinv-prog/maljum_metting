@@ -68,3 +68,30 @@ drop policy if exists "transactions_write_anon" on transactions;
 drop policy if exists "transactions_write_auth" on transactions;
 create policy "transactions_write_auth" on transactions
   for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+
+-- ============================================================
+-- 4. fixed_deposits (계모임 정기예금 계좌) — 계좌 하나짜리라 단일 행으로 관리
+-- ============================================================
+create table if not exists fixed_deposits (
+  id             text primary key,
+  account_number text not null,
+  product_name   text not null default '정기예금',
+  opened_date    date not null,
+  maturity_date  date not null,
+  principal      numeric not null,
+  rate           numeric not null,
+  tax_type       text not null default '일반과세',
+  balance        numeric not null,
+  history        jsonb not null default '[]',
+  updated_at     timestamptz not null default now()
+);
+
+alter table fixed_deposits enable row level security;
+
+drop policy if exists "fixed_deposits_select_auth" on fixed_deposits;
+create policy "fixed_deposits_select_auth" on fixed_deposits
+  for select using (auth.role() = 'authenticated');
+
+drop policy if exists "fixed_deposits_write_auth" on fixed_deposits;
+create policy "fixed_deposits_write_auth" on fixed_deposits
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');

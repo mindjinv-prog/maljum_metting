@@ -115,6 +115,50 @@ export async function seedIfEmpty(seedHouseholds, seedTransactions) {
   return { seededHouseholds: !householdCount, seededTransactions: !txCount };
 }
 
+// ---------- 정기예금 ----------
+// 계모임이 가입한 정기예금 계좌 1개를 단일 행으로 저장/조회한다.
+function toDbFixedDeposit(d) {
+  return {
+    id: d.id,
+    account_number: d.accountNumber,
+    product_name: d.productName,
+    opened_date: d.openedDate,
+    maturity_date: d.maturityDate,
+    principal: d.principal,
+    rate: d.rate,
+    tax_type: d.taxType,
+    balance: d.balance,
+    history: d.history || [],
+  };
+}
+
+function fromDbFixedDeposit(row) {
+  return {
+    id: row.id,
+    accountNumber: row.account_number,
+    productName: row.product_name,
+    openedDate: row.opened_date,
+    maturityDate: row.maturity_date,
+    principal: Number(row.principal) || 0,
+    rate: Number(row.rate) || 0,
+    taxType: row.tax_type,
+    balance: Number(row.balance) || 0,
+    history: row.history || [],
+  };
+}
+
+// 등록된 정기예금이 없으면 null을 돌려준다 (아직 계좌 정보를 안 넣은 상태일 수 있어서).
+export async function fetchFixedDeposits() {
+  const { data, error } = await supabase.from("fixed_deposits").select("*").order("id", { ascending: true });
+  if (error) throw error;
+  return (data || []).map(fromDbFixedDeposit);
+}
+
+export async function saveFixedDeposit(deposit) {
+  const { error } = await supabase.from("fixed_deposits").upsert(toDbFixedDeposit(deposit));
+  if (error) throw error;
+}
+
 // "초기 데이터로 리셋" 버튼에서 사용 — 기존 행을 모두 지우고 시드 데이터를 다시 넣는다.
 export async function resetAll(seedHouseholds, seedTransactions) {
   const delHouseholds = await supabase.from("households").delete().not("id", "is", null);
