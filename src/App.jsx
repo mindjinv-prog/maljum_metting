@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
-import { Upload, ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, Users, Wallet, TrendingUp, X } from "lucide-react";
+import { Upload, ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, Users, Wallet, TrendingUp, X, PiggyBank } from "lucide-react";
 import {
   fetchHouseholds,
   fetchTransactions,
@@ -688,6 +688,11 @@ export default function MajagyeLedger() {
   const totalUnpaid = (r) => r.unpaidMonths.length + r.priorArrearsUnpaidCount;
   const overdueHouseholds = ledger.rows.filter((r) => totalUnpaid(r) > 0);
   const worstOverdue = overdueHouseholds.slice().sort((a, b) => totalUnpaid(b) - totalUnpaid(a))[0];
+  const totalUnpaidAmount = ledger.rows.reduce(
+    (s, r) => s + r.unpaidMonths.length * r.household.fee + r.priorArrearsAmount,
+    0
+  );
+  const combinedTotal = currentBalance + totalUnpaidAmount;
 
   const chartData = ledger.months.map((m) => {
     const monthDeposits = transactions.filter(
@@ -892,6 +897,12 @@ export default function MajagyeLedger() {
             label="잔금"
             value={fmtWon(currentBalance)}
             sub={latestTx ? `${latestTx.date} 기준 · 누적 수금 ${fmtWon(totalCollected)}` : "거래 없음"}
+          />
+          <StatCard
+            icon={PiggyBank}
+            label="잔금 + 미납 합계"
+            value={fmtWon(combinedTotal)}
+            sub={totalUnpaidAmount > 0 ? `미납 ${fmtWon(totalUnpaidAmount)} 포함` : "미납 없음"}
           />
           <StatCard icon={CheckCircle2} label={`${MONTH_LABEL(currentMonth)} 납부 현황`} value={`${paidThisMonth} / ${households.length}가구`} />
           <StatCard
