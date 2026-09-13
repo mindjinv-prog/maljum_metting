@@ -142,6 +142,7 @@ function buildLedger(households, transactions, startMonth, endMonth) {
       partials: [],
       trail: [], // {tx, covers:[월라벨...]}
       totalPaid: 0,
+      loans: [], // 계모임 -> 회원에게 빌려준 대출 (loanHouseholdId로 태그된 출금)
     };
   }
 
@@ -151,7 +152,13 @@ function buildLedger(households, transactions, startMonth, endMonth) {
     .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
 
   for (const t of transactions) {
-    if (t.withdraw > 0) expenditure.push(t);
+    if (t.withdraw > 0) {
+      if (t.loanHouseholdId && perHousehold[t.loanHouseholdId]) {
+        perHousehold[t.loanHouseholdId].loans.push(t);
+      } else {
+        expenditure.push(t);
+      }
+    }
   }
 
   for (const t of deposits) {
@@ -214,6 +221,8 @@ function buildLedger(households, transactions, startMonth, endMonth) {
       partials: rec.partials,
       trail: rec.trail,
       totalPaid: rec.totalPaid,
+      loans: rec.loans,
+      loanAmount: rec.loans.reduce((s, l) => s + l.withdraw, 0),
     };
   });
 
@@ -445,6 +454,26 @@ function HouseholdDetail({ row, months }) {
           </div>
         </div>
       )}
+      {row.loans && row.loans.length > 0 && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: "10px 12px",
+            background: "rgba(43,58,85,0.05)",
+            border: "1px solid rgba(43,58,85,0.2)",
+            borderRadius: 8,
+          }}
+        >
+          <div style={{ fontWeight: 600, color: "var(--indigo)", marginBottom: 3 }}>
+            대출 {row.loans.length}건 · {fmtWon(row.loanAmount)}
+          </div>
+          {row.loans.map((l, i) => (
+            <div key={i} style={{ color: "var(--ink-soft)", fontSize: 12.5 }}>
+              {l.date} · {fmtWon(l.withdraw)}{(l.memo || l.desc) ? ` · ${l.memo || l.desc}` : ""}
+            </div>
+          ))}
+        </div>
+      )}
       {row.trail.length === 0 ? (
         <div style={{ color: "var(--ink-soft)" }}>이 기간 입금 기록이 없어요.</div>
       ) : (
@@ -522,6 +551,11 @@ function MobileHouseholdCard({ row, months, isExpanded, onToggle }) {
             ) : (
               <span style={{ color: "var(--ink-soft)" }}>이월분 완납</span>
             )}
+          </div>
+        )}
+        {row.loans.length > 0 && (
+          <div style={{ fontSize: 11.5, marginTop: 6, color: "var(--indigo)", fontWeight: 600 }}>
+            대출 {fmtWon(row.loanAmount)}
           </div>
         )}
 
@@ -1088,6 +1122,11 @@ export default function MajagyeLedger() {
                               )}
                             </div>
                           )}
+                          {row.loans.length > 0 && (
+                            <div style={{ fontSize: 11, marginTop: 3, color: "var(--indigo)", fontWeight: 600 }}>
+                              대출 {fmtWon(row.loanAmount)} (자세히 보기 ▸)
+                            </div>
+                          )}
                         </td>
                         <td style={{ padding: "10px", fontSize: 13, fontFamily: "'IBM Plex Mono', monospace" }}>{(row.household.fee / 10000)}만원</td>
                         {ledger.months.map((m) => (
@@ -1163,53 +1202,6 @@ export default function MajagyeLedger() {
           </div>
         )}
 
-        {/* 제외된 거래 */}
-        {ledger.excluded.length > 0 && (
-          <div style={{ background: "#fff", border: "1px solid var(--paper-line)", borderRadius: 10, padding: "14px 18px", marginBottom: 22 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 8, color: "var(--ink-soft)" }}>
-              회비 계산에서 제외된 거래 ({ledger.excluded.length}건)
-            </div>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 480 }}>
-                <tbody>
-                  {ledger.excluded.map((t) => (
-                    <tr key={t.key} style={{ borderTop: "1px solid var(--paper-line)" }}>
-                      <td style={{ padding: "6px 8px 6px 0", fontFamily: "'IBM Plex Mono', monospace", color: "var(--ink-soft)" }}>{t.date}</td>
-                      <td style={{ padding: "6px 8px", fontWeight: 600 }}>{t.name}</td>
-                      <td style={{ padding: "6px 8px", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtWon(t.deposit)}</td>
-                      <td style={{ padding: "6px 8px", color: "var(--ink-soft)" }}>{t.excludeReason || "수동 제외"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* 지출 내역 */}
-        {ledger.expenditure.length > 0 && (
-          <div style={{ background: "#fff", border: "1px solid var(--paper-line)", borderRadius: 10, padding: "14px 18px" }}>
-            <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 8 }}>지출 내역 (출금)</div>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 420 }}>
-                <tbody>
-                  {ledger.expenditure.map((t) => (
-                    <tr key={t.key} style={{ borderTop: "1px solid var(--paper-line)" }}>
-                      <td style={{ padding: "6px 8px 6px 0", fontFamily: "'IBM Plex Mono', monospace", color: "var(--ink-soft)" }}>{t.date}</td>
-                      <td style={{ padding: "6px 8px", fontWeight: 600 }}>
-                        {t.memo || t.name || t.desc}
-                        {t.memo && t.name && t.memo !== t.name && (
-                          <div style={{ fontSize: 11, color: "var(--ink-soft)", fontWeight: 400 }}>계좌 표시명: {t.name}</div>
-                        )}
-                      </td>
-                      <td style={{ padding: "6px 8px", fontFamily: "'IBM Plex Mono', monospace", color: "var(--stamp-red-deep)" }}>-{fmtWon(t.withdraw)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

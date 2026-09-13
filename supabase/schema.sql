@@ -33,8 +33,13 @@ create table if not exists transactions (
   branch         text,
   excluded       boolean not null default false,
   exclude_reason text,
+  loan_household_id text references households(id),
   created_at     timestamptz not null default now()
 );
+
+-- 기존에 만들어진 transactions 테이블에는 create table if not exists가 컬럼을
+-- 추가해주지 않으므로, 이미 테이블이 있어도 안전하게 재실행 가능하도록 별도 추가.
+alter table transactions add column if not exists loan_household_id text references households(id);
 
 create index if not exists transactions_month_idx on transactions (month);
 create index if not exists transactions_name_idx on transactions (name);

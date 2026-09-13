@@ -43,6 +43,7 @@ function toDbTransaction(t) {
     branch: t.branch,
     excluded: !!t.excluded,
     exclude_reason: t.excludeReason || null,
+    loan_household_id: t.loanHouseholdId || null,
   };
 }
 
@@ -60,6 +61,7 @@ function fromDbTransaction(row) {
     balance: Number(row.balance) || 0,
     branch: row.branch,
     ...(row.excluded ? { excluded: true, excludeReason: row.exclude_reason || undefined } : {}),
+    ...(row.loan_household_id ? { loanHouseholdId: row.loan_household_id } : {}),
   };
 }
 
