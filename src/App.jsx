@@ -812,7 +812,8 @@ export default function MajagyeLedger() {
     0
   );
   const totalFixedDeposit = fixedDeposits.reduce((s, d) => s + d.balance, 0);
-  const totalAssets = currentBalance + totalFixedDeposit + totalUnpaidAmount;
+  const totalLoanAmount = ledger.rows.reduce((s, r) => s + r.loanAmount, 0);
+  const totalAssets = currentBalance + totalFixedDeposit + totalUnpaidAmount + totalLoanAmount;
 
   const chartData = ledger.months.map((m) => {
     const monthDeposits = transactions.filter(
@@ -1041,7 +1042,7 @@ export default function MajagyeLedger() {
               icon={PiggyBank}
               label="총 자산"
               value={fmtWon(totalAssets)}
-              sub={`잔금 ${fmtWon(currentBalance)} + 정기예금 ${fmtWon(totalFixedDeposit)} + 미납 ${fmtWon(totalUnpaidAmount)}`}
+              sub={`잔금 ${fmtWon(currentBalance)} + 정기예금 ${fmtWon(totalFixedDeposit)} + 대출 ${fmtWon(totalLoanAmount)} + 미납 ${fmtWon(totalUnpaidAmount)}`}
               onClick={() => setAssetView("balance")}
               toggleHint="현재 잔금 보기"
             />
