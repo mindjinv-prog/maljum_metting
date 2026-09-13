@@ -448,34 +448,36 @@ function HouseholdDetail({ row, months }) {
       {row.trail.length === 0 ? (
         <div style={{ color: "var(--ink-soft)" }}>이 기간 입금 기록이 없어요.</div>
       ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ color: "var(--ink-soft)", textAlign: "left" }}>
-              <th style={{ fontWeight: 500, padding: "3px 8px 3px 0" }}>입금일</th>
-              <th style={{ fontWeight: 500, padding: "3px 8px" }}>입금액</th>
-              <th style={{ fontWeight: 500, padding: "3px 8px" }}>충당 개월</th>
-              <th style={{ fontWeight: 500, padding: "3px 8px" }}>해당 월</th>
-            </tr>
-          </thead>
-          <tbody>
-            {row.trail.map((t, i) => (
-              <tr key={i} style={{ borderTop: "1px solid var(--paper-line)" }}>
-                <td style={{ padding: "5px 8px 5px 0", fontFamily: "'IBM Plex Mono', monospace" }}>{t.tx.date}</td>
-                <td style={{ padding: "5px 8px", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtWon(t.tx.deposit)}</td>
-                <td style={{ padding: "5px 8px" }}>{t.covers.length}개월</td>
-                <td style={{ padding: "5px 8px", color: "var(--ink-soft)" }}>
-                  {t.covers.map((m) => FULL_MONTH_LABEL(m)).join(", ")}
-                  {t.covers.some((m) => months.length && m < months[0]) && (
-                    <span style={{ color: "var(--stamp-red-deep)" }}> (이월 미납분 포함)</span>
-                  )}
-                  {t.covers.some((m) => months.length && m > months[months.length - 1]) && (
-                    <span style={{ color: "var(--indigo)" }}> (조회기간 이후 선납분 포함)</span>
-                  )}
-                </td>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 480 }}>
+            <thead>
+              <tr style={{ color: "var(--ink-soft)", textAlign: "left" }}>
+                <th style={{ fontWeight: 500, padding: "3px 8px 3px 0" }}>입금일</th>
+                <th style={{ fontWeight: 500, padding: "3px 8px" }}>입금액</th>
+                <th style={{ fontWeight: 500, padding: "3px 8px" }}>충당 개월</th>
+                <th style={{ fontWeight: 500, padding: "3px 8px" }}>해당 월</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {row.trail.map((t, i) => (
+                <tr key={i} style={{ borderTop: "1px solid var(--paper-line)" }}>
+                  <td style={{ padding: "5px 8px 5px 0", fontFamily: "'IBM Plex Mono', monospace" }}>{t.tx.date}</td>
+                  <td style={{ padding: "5px 8px", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtWon(t.tx.deposit)}</td>
+                  <td style={{ padding: "5px 8px" }}>{t.covers.length}개월</td>
+                  <td style={{ padding: "5px 8px", color: "var(--ink-soft)" }}>
+                    {t.covers.map((m) => FULL_MONTH_LABEL(m)).join(", ")}
+                    {t.covers.some((m) => months.length && m < months[0]) && (
+                      <span style={{ color: "var(--stamp-red-deep)" }}> (이월 미납분 포함)</span>
+                    )}
+                    {t.covers.some((m) => months.length && m > months[months.length - 1]) && (
+                      <span style={{ color: "var(--indigo)" }}> (조회기간 이후 선납분 포함)</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
       {row.partials.length > 0 && (
         <div style={{ marginTop: 8, color: "var(--stamp-red-deep)", display: "flex", gap: 6, alignItems: "center" }}>
@@ -483,6 +485,79 @@ function HouseholdDetail({ row, months }) {
           회비가 정확히 나누어떨어지지 않는 입금이 있어요 (잔액 확인 필요): {row.partials.map((p) => fmtWon(p.remainder)).join(", ")}
         </div>
       )}
+    </div>
+  );
+}
+
+function MobileHouseholdCard({ row, months, isExpanded, onToggle }) {
+  const overdue = row.unpaidMonths.length + row.priorArrearsUnpaidCount;
+  return (
+    <div
+      style={{
+        background: "#fff",
+        border: "1px solid var(--paper-line)",
+        borderRadius: 10,
+        marginBottom: 10,
+        overflow: "hidden",
+      }}
+    >
+      <div onClick={onToggle} style={{ padding: "12px 14px", cursor: "pointer" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14.5 }}>{row.household.names.join(" · ")}</div>
+            <div style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 2 }}>
+              {row.household.role !== "일반" && <span style={{ color: "var(--stamp-red-deep)", fontWeight: 600 }}>{row.household.role} · </span>}
+              가족 {row.household.family}명 · 회비 {row.household.fee / 10000}만원
+            </div>
+          </div>
+          {isExpanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
+        </div>
+
+        {row.priorArrears.length > 0 && (
+          <div style={{ fontSize: 11.5, marginTop: 6 }}>
+            {row.priorArrearsUnpaidCount > 0 ? (
+              <span style={{ color: "var(--stamp-red-deep)", fontWeight: 600 }}>
+                이월 미납 {YEARS_MONTHS_LABEL(row.priorArrearsUnpaidCount)}
+              </span>
+            ) : (
+              <span style={{ color: "var(--ink-soft)" }}>이월분 완납</span>
+            )}
+          </div>
+        )}
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 4, marginTop: 10 }}>
+          {months.map((m) => (
+            <div
+              key={m}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 2,
+                padding: "4px 0",
+                borderRadius: 6,
+                background: row.paidMonths.has(m) ? "rgba(43,58,85,0.06)" : "transparent",
+              }}
+            >
+              <span style={{ fontSize: 10, color: "var(--ink-soft)" }}>{MONTH_LABEL(m).replace("월", "")}</span>
+              {row.paidMonths.has(m) ? <Stamp small /> : <span style={{ color: "var(--muted)", fontSize: 14, opacity: 0.5 }}>·</span>}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, fontSize: 12 }}>
+          <span>
+            {row.overflowCount > 0 ? (
+              <span style={{ color: "var(--indigo)", fontWeight: 600 }}>선납 +{row.overflowCount}개월</span>
+            ) : (
+              <span style={{ color: "var(--muted)" }}>선납 없음</span>
+            )}
+          </span>
+          {overdue > 0 && <span style={{ color: "var(--stamp-red-deep)", fontWeight: 600 }}>미납 {overdue}개월</span>}
+        </div>
+      </div>
+
+      {isExpanded && <HouseholdDetail row={row} months={months} />}
     </div>
   );
 }
@@ -747,10 +822,25 @@ export default function MajagyeLedger() {
         ::selection { background: rgba(166,50,60,0.25); }
         .ledger-scroll::-webkit-scrollbar { height: 8px; }
         .ledger-scroll::-webkit-scrollbar-thumb { background: var(--paper-line); border-radius: 4px; }
+        :root {
+          --pad-header: 28px 24px 22px;
+          --pad-paper: 24px;
+          --fs-h1: 30px;
+        }
+        .ledger-mobile-list { display: none; }
+        @media (max-width: 640px) {
+          :root {
+            --pad-header: 18px 16px 16px;
+            --pad-paper: 14px;
+            --fs-h1: 22px;
+          }
+          .ledger-desktop-table { display: none; }
+          .ledger-mobile-list { display: block; }
+        }
       `}</style>
 
       {/* 헤더 : 인디고 표지 */}
-      <div style={{ padding: "28px 24px 22px", borderBottom: `3px solid var(--brass)` }}>
+      <div style={{ padding: "var(--pad-header)", borderBottom: `3px solid var(--brass)` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
           <div>
             <div style={{ fontSize: 12, letterSpacing: 2, color: "var(--brass)", marginBottom: 6 }}>
@@ -759,7 +849,7 @@ export default function MajagyeLedger() {
             <h1
               style={{
                 fontFamily: "'Noto Serif KR', serif",
-                fontSize: 30,
+                fontSize: "var(--fs-h1)",
                 fontWeight: 700,
                 color: "#F4EFE0",
                 margin: 0,
@@ -849,7 +939,7 @@ export default function MajagyeLedger() {
       </div>
 
       {/* 한지 속지 영역 */}
-      <div style={{ background: "var(--paper)", padding: "24px", position: "relative" }}>
+      <div style={{ background: "var(--paper)", padding: "var(--pad-paper)", position: "relative" }}>
         {/* 붉은 마진선 */}
         <div style={{ position: "absolute", left: 14, top: 0, bottom: 0, width: 1.5, background: "rgba(166,50,60,0.35)" }} />
 
@@ -953,8 +1043,8 @@ export default function MajagyeLedger() {
           <FixedDepositCard key={d.id} deposit={d} />
         ))}
 
-        {/* 장부 도장 테이블 */}
-        <div style={{ background: "#fff", border: "1px solid var(--paper-line)", borderRadius: 10, overflow: "hidden", marginBottom: 22 }}>
+        {/* 장부 도장 테이블 (데스크톱) */}
+        <div className="ledger-desktop-table" style={{ background: "#fff", border: "1px solid var(--paper-line)", borderRadius: 10, overflow: "hidden", marginBottom: 22 }}>
           <div style={{ padding: "14px 18px 4px", fontSize: 13.5, fontWeight: 600 }}>가구별 월별 납부 현황</div>
           <div className="ledger-scroll" style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
@@ -1036,24 +1126,40 @@ export default function MajagyeLedger() {
           </div>
         </div>
 
+        {/* 가구별 월별 납부 현황 (모바일) */}
+        <div className="ledger-mobile-list" style={{ marginBottom: 22 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>가구별 월별 납부 현황</div>
+          {ledger.rows.map((row) => (
+            <MobileHouseholdCard
+              key={row.household.id}
+              row={row}
+              months={ledger.months}
+              isExpanded={expandedId === row.household.id}
+              onToggle={() => setExpandedId(expandedId === row.household.id ? null : row.household.id)}
+            />
+          ))}
+        </div>
+
         {/* 미확인 입금 */}
         {ledger.unmatched.length > 0 && (
           <div style={{ background: "#fff", border: "1px solid var(--paper-line)", borderRadius: 10, padding: "14px 18px", marginBottom: 22 }}>
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
               <AlertTriangle size={14} color="var(--stamp-red-deep)" /> 회원 명단과 매칭되지 않은 입금 ({ledger.unmatched.length}건)
             </div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <tbody>
-                {ledger.unmatched.map((t) => (
-                  <tr key={t.key} style={{ borderTop: "1px solid var(--paper-line)" }}>
-                    <td style={{ padding: "6px 8px 6px 0", fontFamily: "'IBM Plex Mono', monospace", color: "var(--ink-soft)" }}>{t.date}</td>
-                    <td style={{ padding: "6px 8px", fontWeight: 600 }}>{t.name || "(이름없음)"}</td>
-                    <td style={{ padding: "6px 8px", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtWon(t.deposit)}</td>
-                    <td style={{ padding: "6px 8px", color: "var(--ink-soft)" }}>회원 명단에서 이름을 확인해 주세요</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 480 }}>
+                <tbody>
+                  {ledger.unmatched.map((t) => (
+                    <tr key={t.key} style={{ borderTop: "1px solid var(--paper-line)" }}>
+                      <td style={{ padding: "6px 8px 6px 0", fontFamily: "'IBM Plex Mono', monospace", color: "var(--ink-soft)" }}>{t.date}</td>
+                      <td style={{ padding: "6px 8px", fontWeight: 600 }}>{t.name || "(이름없음)"}</td>
+                      <td style={{ padding: "6px 8px", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtWon(t.deposit)}</td>
+                      <td style={{ padding: "6px 8px", color: "var(--ink-soft)" }}>회원 명단에서 이름을 확인해 주세요</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -1063,18 +1169,20 @@ export default function MajagyeLedger() {
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 8, color: "var(--ink-soft)" }}>
               회비 계산에서 제외된 거래 ({ledger.excluded.length}건)
             </div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <tbody>
-                {ledger.excluded.map((t) => (
-                  <tr key={t.key} style={{ borderTop: "1px solid var(--paper-line)" }}>
-                    <td style={{ padding: "6px 8px 6px 0", fontFamily: "'IBM Plex Mono', monospace", color: "var(--ink-soft)" }}>{t.date}</td>
-                    <td style={{ padding: "6px 8px", fontWeight: 600 }}>{t.name}</td>
-                    <td style={{ padding: "6px 8px", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtWon(t.deposit)}</td>
-                    <td style={{ padding: "6px 8px", color: "var(--ink-soft)" }}>{t.excludeReason || "수동 제외"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 480 }}>
+                <tbody>
+                  {ledger.excluded.map((t) => (
+                    <tr key={t.key} style={{ borderTop: "1px solid var(--paper-line)" }}>
+                      <td style={{ padding: "6px 8px 6px 0", fontFamily: "'IBM Plex Mono', monospace", color: "var(--ink-soft)" }}>{t.date}</td>
+                      <td style={{ padding: "6px 8px", fontWeight: 600 }}>{t.name}</td>
+                      <td style={{ padding: "6px 8px", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtWon(t.deposit)}</td>
+                      <td style={{ padding: "6px 8px", color: "var(--ink-soft)" }}>{t.excludeReason || "수동 제외"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -1082,22 +1190,24 @@ export default function MajagyeLedger() {
         {ledger.expenditure.length > 0 && (
           <div style={{ background: "#fff", border: "1px solid var(--paper-line)", borderRadius: 10, padding: "14px 18px" }}>
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 8 }}>지출 내역 (출금)</div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <tbody>
-                {ledger.expenditure.map((t) => (
-                  <tr key={t.key} style={{ borderTop: "1px solid var(--paper-line)" }}>
-                    <td style={{ padding: "6px 8px 6px 0", fontFamily: "'IBM Plex Mono', monospace", color: "var(--ink-soft)" }}>{t.date}</td>
-                    <td style={{ padding: "6px 8px", fontWeight: 600 }}>
-                      {t.memo || t.name || t.desc}
-                      {t.memo && t.name && t.memo !== t.name && (
-                        <div style={{ fontSize: 11, color: "var(--ink-soft)", fontWeight: 400 }}>계좌 표시명: {t.name}</div>
-                      )}
-                    </td>
-                    <td style={{ padding: "6px 8px", fontFamily: "'IBM Plex Mono', monospace", color: "var(--stamp-red-deep)" }}>-{fmtWon(t.withdraw)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 420 }}>
+                <tbody>
+                  {ledger.expenditure.map((t) => (
+                    <tr key={t.key} style={{ borderTop: "1px solid var(--paper-line)" }}>
+                      <td style={{ padding: "6px 8px 6px 0", fontFamily: "'IBM Plex Mono', monospace", color: "var(--ink-soft)" }}>{t.date}</td>
+                      <td style={{ padding: "6px 8px", fontWeight: 600 }}>
+                        {t.memo || t.name || t.desc}
+                        {t.memo && t.name && t.memo !== t.name && (
+                          <div style={{ fontSize: 11, color: "var(--ink-soft)", fontWeight: 400 }}>계좌 표시명: {t.name}</div>
+                        )}
+                      </td>
+                      <td style={{ padding: "6px 8px", fontFamily: "'IBM Plex Mono', monospace", color: "var(--stamp-red-deep)" }}>-{fmtWon(t.withdraw)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
