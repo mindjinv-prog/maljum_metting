@@ -10,8 +10,6 @@ import {
   fetchFixedDeposits,
   saveHouseholds,
   insertNewTransactions,
-  seedIfEmpty,
-  resetAll,
 } from "./lib/ledgerStore";
 import { Landmark } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
@@ -24,58 +22,11 @@ import Login from "./Login";
    변환해 보여주는 장부형 대시보드.
    ============================================================ */
 
-// ---------- 회원(가구) 명단 ----------
-// ※ 이 배열은 "실제 데이터가 없을 때 보여줄 예시" 용도입니다.
-//    실제 회원 명단/거래내역은 Supabase에 저장되며, 앱 로드시 자동으로
-//    불러옵니다 (src/lib/ledgerStore.js 참고). 공개 저장소에 실명이
-//    들어가지 않도록 아래는 전부 가상의 예시 데이터입니다.
-const INITIAL_HOUSEHOLDS = [
-  { id: "h1", names: ["김철수"], family: 2, role: "일반", fee: 30000 },
-  { id: "h2", names: ["이영희"], family: 1, role: "일반", fee: 30000 },
-  { id: "h3", names: ["박민수", "최지은"], family: 4, role: "일반", fee: 30000 },
-  { id: "h4", names: ["정다은"], family: 3, role: "총무", fee: 20000 },
-  { id: "h5", names: ["강민준", "윤서연"], family: 4, role: "회장", fee: 20000, priorArrears: ["2025-10", "2025-11", "2025-12"] },
-];
-
-// ---------- 예시 거래내역 (시드 데이터) ----------
-// ※ 실명 대신 위 INITIAL_HOUSEHOLDS와 짝이 맞는 가상의 이름을 사용합니다.
-const SEED_ROWS = [
-  ["2026.08.15 10:00:00", "전자금융", "김철수", "", 0, 30000, 500000, "예시은행"],
-  ["2026.08.10 09:30:00", "전자금융", "이영희", "", 0, 30000, 470000, "예시은행"],
-  ["2026.08.05 14:20:00", "전자금융", "박민수", "", 0, 30000, 440000, "예시은행"],
-  ["2026.07.15 10:00:00", "전자금융", "김철수", "", 0, 30000, 410000, "예시은행"],
-  ["2026.07.10 09:30:00", "전자금융", "이영희", "", 0, 30000, 380000, "예시은행"],
-  ["2026.06.30 12:00:00", "결산이자", "이자세금:10원", "", 0, 90, 350000, "예시은행"],
-  ["2026.06.05 15:00:00", "스마트출금", "예시업체", "행사비", 100000, 0, 349910, "예시은행"],
-  ["2026.06.01 15:28:33", "전자금융", "정다은", "", 0, 900000, 449910, "예시은행"],
-];
-
-function rowsToTransactions(rows) {
-  return rows.map((r, i) => {
-    const [dt, desc, name, memo, wd, dep, bal, branch] = r;
-    const [datePart, timePart] = String(dt).split(" ");
-    const ymd = datePart.replaceAll(".", "-");
-    return {
-      key: `seed-${i}-${ymd}-${name}-${wd}-${dep}`,
-      date: ymd,
-      time: timePart || "",
-      month: ymd.slice(0, 7),
-      desc,
-      name: String(name || "").trim(),
-      memo: memo || "",
-      withdraw: Number(wd) || 0,
-      deposit: Number(dep) || 0,
-      balance: Number(bal) || 0,
-      branch,
-    };
-  });
-}
-
-const SEED_TRANSACTIONS = rowsToTransactions(SEED_ROWS).map((t) =>
-  t.date === "2026-06-01" && t.name === "정다은" && t.deposit === 900000
-    ? { ...t, excluded: true, excludeReason: "회비 아님으로 확인되어 제외 (예시)" }
-    : t
-);
+// ---------- 회원(가구) 명단 / 거래내역 ----------
+// 실제 데이터는 전부 Supabase에서 불러온다 (src/lib/ledgerStore.js 참고).
+// ※ 예전에는 예시(가상) 데이터를 코드에 두고, 불러오기에 실패하면 그걸로 대체했는데
+//    그 상태가 자동 저장되면서 실제 회원(h1~h5)이 예시 이름으로 덮어써지는 사고가 있었다.
+//    그래서 예시 데이터는 아예 두지 않고, 불러오기에 실패하면 저장을 막고 오류 화면을 보여준다.
 
 // ---------- 월 유틸 ----------
 function monthRange(start, end) {
@@ -597,14 +548,18 @@ function MobileHouseholdCard({ row, months, isExpanded, onToggle }) {
 }
 
 export default function MajagyeLedger() {
-  const [households, setHouseholds] = useState(INITIAL_HOUSEHOLDS);
-  const [transactions, setTransactions] = useState(SEED_TRANSACTIONS);
+  const [households, setHouseholds] = useState([]);
+  const [transactions, setTransactions] = useState([]);
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [expandedId, setExpandedId] = useState(null);
   const [showEditor, setShowEditor] = useState(false);
   const [fileError, setFileError] = useState("");
   const [fileName, setFileName] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [reloadToken, setReloadToken] = useState(0);
+  // DB에서 불러온(또는 마지막으로 저장한) 회원 명단 — 실제로 바뀐 게 있을 때만 저장하기 위해 기억해둔다.
+  const lastSavedHouseholdsRef = useRef(null);
   const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved | error
   const [session, setSession] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -620,18 +575,23 @@ export default function MajagyeLedger() {
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
-      if (!newSession) setLoaded(false); // 로그아웃하면 다음 로그인 때 다시 불러오도록
+      if (!newSession) {
+        // 로그아웃하면 다음 로그인 때 다시 불러오도록
+        setLoaded(false);
+        lastSavedHouseholdsRef.current = null;
+      }
     });
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  // ---- 로그인 후 Supabase에서 데이터 불러오기 (테이블이 비어있으면 시드 데이터로 초기화) ----
+  // ---- 로그인 후 Supabase에서 데이터 불러오기 ----
+  // 실패하면 loaded를 false로 둬서 자동 저장/업로드가 절대 실행되지 않게 한다.
   useEffect(() => {
     if (!session) return;
     let cancelled = false;
+    setLoadError("");
     (async () => {
       try {
-        await seedIfEmpty(INITIAL_HOUSEHOLDS, SEED_TRANSACTIONS);
         const [loadedHouseholds, loadedTransactions, loadedFixedDeposits] = await Promise.all([
           fetchHouseholds(),
           fetchTransactions(),
@@ -641,32 +601,33 @@ export default function MajagyeLedger() {
           }),
         ]);
         if (!cancelled) {
-          setHouseholds(loadedHouseholds.length ? loadedHouseholds : INITIAL_HOUSEHOLDS);
-          setTransactions(loadedTransactions.length ? loadedTransactions : SEED_TRANSACTIONS);
+          lastSavedHouseholdsRef.current = JSON.stringify(loadedHouseholds);
+          setHouseholds(loadedHouseholds);
+          setTransactions(loadedTransactions);
           setFixedDeposits(loadedFixedDeposits);
           setLoaded(true);
         }
       } catch (err) {
         console.error("[Supabase] 초기 데이터를 불러오지 못했어요.", err);
         if (!cancelled) {
-          // Supabase 연결에 실패해도 화면이 완전히 막히지 않도록 시드 데이터로 폴백
-          setHouseholds(INITIAL_HOUSEHOLDS);
-          setTransactions(SEED_TRANSACTIONS);
-          setLoaded(true);
-          setSaveStatus("error");
+          setLoaded(false);
+          setLoadError(err?.message || "알 수 없는 오류");
         }
       }
     })();
     return () => { cancelled = true; };
-  }, [session]);
+  }, [session, reloadToken]);
 
   // ---- 회원 명단 변경 시 자동 저장 (거래내역은 업로드 시점에 바로 저장됨) ----
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || lastSavedHouseholdsRef.current === null) return;
+    const snapshot = JSON.stringify(households);
+    if (snapshot === lastSavedHouseholdsRef.current) return; // 바뀐 게 없으면 저장하지 않음
     setSaveStatus("saving");
     const t = setTimeout(async () => {
       try {
         await saveHouseholds(households);
+        lastSavedHouseholdsRef.current = snapshot;
         setSaveStatus("saved");
       } catch (err) {
         console.error("[Supabase] 회원 명단 저장 실패", err);
@@ -675,21 +636,6 @@ export default function MajagyeLedger() {
     }, 400); // 짧은 debounce로 저장 호출 과다 방지
     return () => clearTimeout(t);
   }, [households, loaded]);
-
-  const resetToSeed = useCallback(async () => {
-    if (!window.confirm("저장된 데이터를 지우고 초기 시드 데이터로 되돌릴까요? 이 작업은 되돌릴 수 없어요.")) return;
-    setSaveStatus("saving");
-    try {
-      await resetAll(INITIAL_HOUSEHOLDS, SEED_TRANSACTIONS);
-      setSaveStatus("saved");
-    } catch (err) {
-      console.error("[Supabase] 초기화 실패", err);
-      setSaveStatus("error");
-    } finally {
-      setHouseholds(INITIAL_HOUSEHOLDS);
-      setTransactions(SEED_TRANSACTIONS);
-    }
-  }, []);
 
   const currentYM = getCurrentYM();
   const startMonth = `${year}-01`;
@@ -714,6 +660,10 @@ export default function MajagyeLedger() {
   const handleFile = useCallback(
     (file) => {
       setFileError("");
+      if (!loaded) {
+        setFileError("장부를 아직 불러오지 못해서 업로드할 수 없어요. 새로고침 후 다시 시도해 주세요.");
+        return;
+      }
       const reader = new FileReader();
       reader.onload = async (e) => {
         try {
@@ -751,7 +701,7 @@ export default function MajagyeLedger() {
       };
       reader.readAsArrayBuffer(file);
     },
-    [transactions]
+    [transactions, loaded]
   );
 
   if (!authChecked) {
@@ -793,7 +743,20 @@ export default function MajagyeLedger() {
           padding: 40,
         }}
       >
-        저장된 장부를 불러오는 중…
+        {loadError ? (
+          <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: 12, alignItems: "center" }}>
+            <div>장부를 불러오지 못했어요. 데이터 보호를 위해 저장은 막아뒀어요.</div>
+            <div style={{ fontSize: 12, color: "#93A0B4" }}>{loadError}</div>
+            <button
+              onClick={() => setReloadToken((n) => n + 1)}
+              style={{ background: "#A6323C", color: "#fff", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 13.5, cursor: "pointer" }}
+            >
+              다시 시도
+            </button>
+          </div>
+        ) : (
+          "저장된 장부를 불러오는 중…"
+        )}
       </div>
     );
   }
@@ -940,16 +903,6 @@ export default function MajagyeLedger() {
             <Users size={15} /> 회원 명단 {showEditor ? "닫기" : "관리"}
           </button>
           <button
-            onClick={resetToSeed}
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              background: "transparent", color: "#A9B4C4", border: "1px solid rgba(176,141,87,0.4)",
-              borderRadius: 8, padding: "9px 14px", fontSize: 12.5,
-            }}
-          >
-            초기 데이터로 리셋
-          </button>
-          <button
             onClick={() => supabase.auth.signOut()}
             style={{
               display: "flex", alignItems: "center", gap: 6,
@@ -962,7 +915,7 @@ export default function MajagyeLedger() {
           {fileName && <span style={{ color: "#C7CEDA", fontSize: 12.5, alignSelf: "center" }}>{fileName}</span>}
           <span style={{ marginLeft: "auto", alignSelf: "center", fontSize: 12, color: "#93A0B4" }}>
             {saveStatus === "saving" && "저장 중…"}
-            {saveStatus === "saved" && "브라우저에 자동 저장됨 (나만 볼 수 있음)"}
+            {saveStatus === "saved" && "자동 저장됨"}
             {saveStatus === "error" && "저장 실패 — 네트워크를 확인해 주세요"}
           </span>
         </div>

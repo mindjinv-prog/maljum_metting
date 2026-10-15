@@ -98,25 +98,6 @@ export async function insertNewTransactions(newTransactions) {
   if (error) throw error;
 }
 
-// 최초 실행(테이블이 비어있을 때) 시드 데이터를 한 번에 밀어넣을 때 사용.
-export async function seedIfEmpty(seedHouseholds, seedTransactions) {
-  const [{ count: householdCount }, { count: txCount }] = await Promise.all([
-    supabase.from("households").select("id", { count: "exact", head: true }),
-    supabase.from("transactions").select("key", { count: "exact", head: true }),
-  ]);
-
-  if (!householdCount) {
-    const { error } = await supabase.from("households").insert(seedHouseholds.map(toDbHousehold));
-    if (error) throw error;
-  }
-  if (!txCount) {
-    const { error } = await supabase.from("transactions").insert(seedTransactions.map(toDbTransaction));
-    if (error) throw error;
-  }
-
-  return { seededHouseholds: !householdCount, seededTransactions: !txCount };
-}
-
 // ---------- 정기예금 ----------
 // 계모임이 가입한 정기예금 계좌 1개를 단일 행으로 저장/조회한다.
 function toDbFixedDeposit(d) {
@@ -159,17 +140,4 @@ export async function fetchFixedDeposits() {
 export async function saveFixedDeposit(deposit) {
   const { error } = await supabase.from("fixed_deposits").upsert(toDbFixedDeposit(deposit));
   if (error) throw error;
-}
-
-// "초기 데이터로 리셋" 버튼에서 사용 — 기존 행을 모두 지우고 시드 데이터를 다시 넣는다.
-export async function resetAll(seedHouseholds, seedTransactions) {
-  const delHouseholds = await supabase.from("households").delete().not("id", "is", null);
-  if (delHouseholds.error) throw delHouseholds.error;
-  const delTx = await supabase.from("transactions").delete().not("key", "is", null);
-  if (delTx.error) throw delTx.error;
-
-  const insHouseholds = await supabase.from("households").insert(seedHouseholds.map(toDbHousehold));
-  if (insHouseholds.error) throw insHouseholds.error;
-  const insTx = await supabase.from("transactions").insert(seedTransactions.map(toDbTransaction));
-  if (insTx.error) throw insTx.error;
 }

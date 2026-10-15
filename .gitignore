@@ -29,3 +29,6 @@ dist-ssr
 
 # Claude가 보낸 파일 사본
 Claude outputs/
+
+# SQL 쿼리문은 GitHub에 올리지 않음 (로컬에만 보관)
+*.sql
